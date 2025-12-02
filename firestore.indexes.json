@@ -1,0 +1,16 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "profiles",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "lrn",
+          "order": "ASCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
+
