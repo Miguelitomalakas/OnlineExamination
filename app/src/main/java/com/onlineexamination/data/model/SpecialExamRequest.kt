@@ -1,17 +1,21 @@
 package com.onlineexamination.data.model
 
-import com.google.firebase.firestore.ServerTimestamp
-import java.util.Date
-
 data class SpecialExamRequest(
     val id: String = "",
     val studentId: String = "",
     val studentName: String = "",
     val examId: String = "",
     val examTitle: String = "",
-    val reason: String = "",
-    val fileUrl: String = "",
-    val status: String = "Pending", // Pending, Approved, Rejected
-    @ServerTimestamp
-    val requestedAt: Date? = null
+    val teacherId: String = "",
+    val reason: String = "", // "Medical", "Death in Family", "Other"
+    val description: String = "",
+    val proofFileUrl: String = "", // URL to the uploaded certificate
+    val status: RequestStatus = RequestStatus.PENDING,
+    val requestedAt: Long = System.currentTimeMillis()
 )
+
+enum class RequestStatus {
+    PENDING,
+    APPROVED,
+    REJECTED
+}

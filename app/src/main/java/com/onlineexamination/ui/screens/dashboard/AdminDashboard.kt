@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,27 +49,40 @@ fun AdminDashboard(
     var students by remember { mutableStateOf(0) }
     var isLoadingStats by remember { mutableStateOf(true) }
 
-    LaunchedEffect(Unit) {
-        try {
-            val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-            val usersSnapshot = firestore.collection("users").get().await()
-            totalUsers = usersSnapshot.size()
-            
-            teachers = usersSnapshot.documents.count { 
-                it.toObject(com.onlineexamination.data.model.User::class.java)?.role == com.onlineexamination.data.model.UserRole.TEACHER 
+    DisposableEffect(Unit) {
+        val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        
+        val usersListener = firestore.collection("users")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+                
+                if (snapshot != null) {
+                    totalUsers = snapshot.size()
+                    teachers = snapshot.documents.count { 
+                        it.toObject(com.onlineexamination.data.model.User::class.java)?.role == com.onlineexamination.data.model.UserRole.TEACHER 
+                    }
+                    students = snapshot.documents.count { 
+                        it.toObject(com.onlineexamination.data.model.User::class.java)?.role == com.onlineexamination.data.model.UserRole.STUDENT 
+                    }
+                    isLoadingStats = false
+                }
             }
-            students = usersSnapshot.documents.count { 
-                it.toObject(com.onlineexamination.data.model.User::class.java)?.role == com.onlineexamination.data.model.UserRole.STUDENT 
+
+        val examsListener = firestore.collection("exams")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+                
+                if (snapshot != null) {
+                    totalExams = snapshot.size()
+                }
             }
-            
-            val examsSnapshot = firestore.collection("exams").get().await()
-            totalExams = examsSnapshot.size()
-            
-            isLoadingStats = false
-        } catch (e: Exception) {
-            isLoadingStats = false
+
+        onDispose {
+            usersListener.remove()
+            examsListener.remove()
         }
     }
+
     val gradientBrush = Brush.verticalGradient(
         listOf(
             AdminGradientStart,
@@ -292,4 +306,3 @@ fun getAdminQuickActions(): List<QuickAction> {
         QuickAction("Settings", Icons.Default.Settings)
     )
 }
-

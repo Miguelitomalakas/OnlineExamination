@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.onlineexamination.data.model.SpecialExamRequest
+import com.onlineexamination.data.repository.FileRepository
 import com.onlineexamination.data.repository.SpecialExamRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,21 +18,43 @@ data class SpecialExamUiState(
 )
 
 class SpecialExamViewModel : ViewModel() {
-
     private val repository = SpecialExamRepository()
+    private val fileRepository = FileRepository()
 
     private val _uiState = MutableStateFlow(SpecialExamUiState())
     val uiState: StateFlow<SpecialExamUiState> = _uiState.asStateFlow()
 
-    fun createSpecialExamRequest(request: SpecialExamRequest, fileUri: Uri) {
+    fun uploadFile(uri: Uri, onResult: (String?) -> Unit) {
         viewModelScope.launch {
-            _uiState.value = SpecialExamUiState(isLoading = true)
-            val result = repository.createSpecialExamRequest(request, fileUri)
-            result.onSuccess {
-                _uiState.value = SpecialExamUiState(successMessage = "Special exam request submitted successfully.")
-            }.onFailure {
-                _uiState.value = SpecialExamUiState(errorMessage = it.message)
-            }
+            val result = fileRepository.uploadFile(uri, "special_exam_requests")
+            onResult(result.getOrNull())
+        }
+    }
+
+    fun submitRequest(
+        studentId: String,
+        studentName: String,
+        examId: String,
+        examTitle: String,
+        reason: String,
+        description: String,
+        fileUrl: String,
+        onResult: (Boolean) -> Unit
+    ) {
+        viewModelScope.launch {
+            val request = SpecialExamRequest(
+                studentId = studentId,
+                studentName = studentName,
+                examId = examId,
+                examTitle = examTitle,
+                // Will be fetched in the repository
+                teacherId = "", 
+                reason = reason,
+                description = description,
+                proofFileUrl = fileUrl
+            )
+            val result = repository.submitRequest(request)
+            onResult(result.isSuccess)
         }
     }
 }

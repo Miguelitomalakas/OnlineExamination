@@ -14,6 +14,8 @@ data class Exam(
     val createdAt: Long = System.currentTimeMillis(),
     val startDate: Long = System.currentTimeMillis(),
     val endDate: Long = System.currentTimeMillis() + (7 * 24 * 60 * 60 * 1000L), // 7 days default
+    val startTime: String = "",
+    val endTime: String = "",
     val isActive: Boolean = true,
     val questions: List<Question> = emptyList(),
     val questionCount: Int = 0,
@@ -39,6 +41,8 @@ enum class QuestionType {
 data class ExamAttempt(
     val id: String = "",
     val examId: String = "",
+    val examTitle: String = "",
+    val teacherId: String = "", // Added for easier querying
     val studentId: String = "",
     val studentName: String = "",
     val studentEmail: String = "",
@@ -76,6 +80,3 @@ data class QuestionResult(
     val points: Int = 0,
     val maxPoints: Int = 10
 )
-
-
-

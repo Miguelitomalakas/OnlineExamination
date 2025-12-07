@@ -1,28 +1,30 @@
 package com.onlineexamination.data.repository
 
-import android.net.Uri
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.storage.FirebaseStorage
+import com.onlineexamination.data.model.Exam
 import com.onlineexamination.data.model.SpecialExamRequest
 import kotlinx.coroutines.tasks.await
-import java.util.UUID
 
 class SpecialExamRepository {
-
     private val firestore = FirebaseFirestore.getInstance()
-    private val storage = FirebaseStorage.getInstance()
+    private val requestsCollection = firestore.collection("special_exam_requests")
+    private val examsCollection = firestore.collection("exams")
 
-    private val specialExamRequestsCollection = firestore.collection("special_exam_requests")
-
-    suspend fun createSpecialExamRequest(request: SpecialExamRequest, fileUri: Uri): Result<Unit> {
+    suspend fun submitRequest(request: SpecialExamRequest): Result<String> {
         return try {
-            val fileName = "special_exam_requests/${request.studentId}/${UUID.randomUUID()}"
-            val uploadTask = storage.reference.child(fileName).putFile(fileUri).await()
-            val fileUrl = uploadTask.storage.downloadUrl.await().toString()
+            // Fetch exam to get teacherId
+            val examSnapshot = examsCollection.document(request.examId).get().await()
+            val exam = examSnapshot.toObject(Exam::class.java)
+            
+            val teacherId = exam?.teacherId ?: return Result.failure(Exception("Exam not found"))
 
-            val requestWithFileUrl = request.copy(fileUrl = fileUrl)
-            specialExamRequestsCollection.add(requestWithFileUrl).await()
-            Result.success(Unit)
+            val newRequest = request.copy(
+                teacherId = teacherId,
+                id = requestsCollection.document().id
+            )
+
+            requestsCollection.document(newRequest.id).set(newRequest).await()
+            Result.success(newRequest.id)
         } catch (e: Exception) {
             Result.failure(e)
         }

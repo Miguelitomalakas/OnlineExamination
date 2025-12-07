@@ -125,7 +125,7 @@ fun StudentResultCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Exam ID: ${attempt.examId.take(8)}...",
+                    text = attempt.examTitle,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
                 )

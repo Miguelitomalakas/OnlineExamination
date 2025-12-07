@@ -24,7 +24,7 @@ data class ExamUiState(
 
 class ExamViewModel : ViewModel() {
     private val repository = ExamRepository()
-    
+
     private val _uiState = MutableStateFlow(ExamUiState())
     val uiState: StateFlow<ExamUiState> = _uiState.asStateFlow()
 
@@ -36,10 +36,10 @@ class ExamViewModel : ViewModel() {
     }
 
     // Load active exams (for students)
-    fun loadActiveExams() {
+    fun loadActiveExamsForStudent(studentId: String) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
-            val result = repository.getActiveExams()
+            val result = repository.getActiveExamsForStudent(studentId)
             result.getOrNull()?.let { exams ->
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -250,6 +250,3 @@ class ExamViewModel : ViewModel() {
         }
     }
 }
-
-
-

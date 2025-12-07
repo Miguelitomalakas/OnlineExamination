@@ -1,16 +1,22 @@
 package com.onlineexamination.ui.screens.exam
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -53,7 +59,7 @@ fun ResultDetailScreen(
                 ),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -81,6 +87,10 @@ fun ResultDetailScreen(
                 }
 
                 item {
+                    PerformanceChartCard(result = result)
+                }
+
+                item {
                     Text(
                         text = "Question Review",
                         fontSize = 20.sp,
@@ -98,13 +108,16 @@ fun ResultDetailScreen(
 
 @Composable
 fun ResultSummaryCard(result: ExamResult) {
+    val correctAnswers = result.questionResults.count { it.isCorrect }
+    val incorrectAnswers = result.questionResults.size - correctAnswers
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (result.isPassed) 
+            containerColor = if (result.isPassed)
                 MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-            else 
+            else
                 MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
         )
     ) {
@@ -121,9 +134,9 @@ fun ResultSummaryCard(result: ExamResult) {
 
             Surface(
                 shape = RoundedCornerShape(8.dp),
-                color = if (result.isPassed) 
+                color = if (result.isPassed)
                     MaterialTheme.colorScheme.primaryContainer
-                else 
+                else
                     MaterialTheme.colorScheme.errorContainer
             ) {
                 Text(
@@ -131,9 +144,9 @@ fun ResultSummaryCard(result: ExamResult) {
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (result.isPassed) 
+                    color = if (result.isPassed)
                         MaterialTheme.colorScheme.primary
-                    else 
+                    else
                         MaterialTheme.colorScheme.error
                 )
             }
@@ -157,13 +170,26 @@ fun ResultSummaryCard(result: ExamResult) {
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = "${String.format("%.1f", result.percentage)}%",
+                        text = "$correctAnswers",
                         fontSize = 32.sp,
                         fontWeight = FontWeight.Bold,
-                        color = StudentColor
+                        color = Color(0xFF66BB6A)
                     )
                     Text(
-                        text = "Percentage",
+                        text = "Correct",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "$incorrectAnswers",
+                        fontSize = 32.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFEF5350)
+                    )
+                    Text(
+                        text = "Incorrect",
                         fontSize = 14.sp,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                     )
@@ -174,14 +200,99 @@ fun ResultSummaryCard(result: ExamResult) {
 }
 
 @Composable
+fun PerformanceChartCard(result: ExamResult) {
+    val correctCount = result.questionResults.count { it.isCorrect }
+    val incorrectCount = result.questionResults.size - correctCount
+    val total = result.questionResults.size
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "Item Analysis",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.align(Alignment.Start)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
+                // Pie Chart
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.size(120.dp)
+                ) {
+                    Canvas(modifier = Modifier.size(120.dp)) {
+                        val strokeWidth = 30f
+                        val radius = size.minDimension / 2 - strokeWidth / 2
+
+                        // Background circle (Incorrect)
+                        drawCircle(
+                            color = Color(0xFFEF5350), // Red
+                            radius = radius,
+                            style = Stroke(width = strokeWidth)
+                        )
+
+                        // Foreground arc (Correct)
+                        if (total > 0) {
+                            val sweepAngle = (correctCount.toFloat() / total) * 360f
+                            drawArc(
+                                color = Color(0xFF66BB6A), // Green
+                                startAngle = -90f,
+                                sweepAngle = sweepAngle,
+                                useCenter = false,
+                                style = Stroke(width = strokeWidth)
+                            )
+                        }
+                    }
+                    Text(
+                        text = "${((correctCount.toFloat() / total) * 100).toInt()}%",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
+                }
+
+                // Legend
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LegendItem(color = Color(0xFF66BB6A), text = "Correct: $correctCount")
+                    LegendItem(color = Color(0xFFEF5350), text = "Incorrect: $incorrectCount")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun LegendItem(color: Color, text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Surface(
+            modifier = Modifier.size(12.dp),
+            shape = RoundedCornerShape(2.dp),
+            color = color
+        ) {}
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(text = text, fontSize = 14.sp)
+    }
+}
+
+@Composable
 fun QuestionResultCard(questionResult: QuestionResult) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (questionResult.isCorrect) 
+            containerColor = if (questionResult.isCorrect)
                 MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)
-            else 
+            else
                 MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f)
         )
     ) {
@@ -202,9 +313,9 @@ fun QuestionResultCard(questionResult: QuestionResult) {
                 )
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = if (questionResult.isCorrect) 
+                    color = if (questionResult.isCorrect)
                         MaterialTheme.colorScheme.primaryContainer
-                    else 
+                    else
                         MaterialTheme.colorScheme.errorContainer
                 ) {
                     Text(
@@ -212,9 +323,9 @@ fun QuestionResultCard(questionResult: QuestionResult) {
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (questionResult.isCorrect) 
+                        color = if (questionResult.isCorrect)
                             MaterialTheme.colorScheme.primary
-                        else 
+                        else
                             MaterialTheme.colorScheme.error
                     )
                 }
@@ -234,9 +345,9 @@ fun QuestionResultCard(questionResult: QuestionResult) {
                 Text(
                     text = questionResult.studentAnswer.ifBlank { "No answer" },
                     fontSize = 14.sp,
-                    color = if (questionResult.isCorrect) 
+                    color = if (questionResult.isCorrect)
                         MaterialTheme.colorScheme.primary
-                    else 
+                    else
                         MaterialTheme.colorScheme.error
                 )
             }
@@ -259,6 +370,3 @@ fun QuestionResultCard(questionResult: QuestionResult) {
         }
     }
 }
-
-
-

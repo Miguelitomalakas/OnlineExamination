@@ -1,4 +1,4 @@
-package com.onlineexamination.ui.screens.exam
+package com.onlineexamination.ui.screens.student
 
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -42,6 +42,27 @@ fun RequestSpecialExamScreen(
     var isUploading by remember { mutableStateOf(false) }
     var isSubmitting by remember { mutableStateOf(false) }
     var showSuccessDialog by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            isUploading = true
+            // Get rudimentary file name
+            fileName = it.lastPathSegment ?: "Selected File"
+            
+            viewModel.uploadFile(it) { url ->
+                isUploading = false
+                if (url != null) {
+                    fileUrl = url
+                } else {
+                    fileName = "" // Reset on failure
+                    // Ideally show error snackbar here
+                }
+            }
+        }
+    }
 
     val reasons = listOf("Medical Certificate", "Death Certificate", "Other")
 
@@ -108,27 +129,61 @@ fun RequestSpecialExamScreen(
                 minLines = 3
             )
 
-            FileUploadField(
-                fileName = fileName,
-                isUploading = isUploading,
-                onFileSelected = {
-                    isUploading = true
-                    viewModel.uploadFile(it) { url ->
-                        isUploading = false
-                        if (url != null) {
-                            fileUrl = url
-                            fileName = it.lastPathSegment ?: "Selected File"
-                        } else {
-                            fileName = "" // Reset on failure
-                            // Ideally show error snackbar here
+            Text("Supporting Document", fontWeight = FontWeight.SemiBold)
+            
+            if (fileName.isNotEmpty() && !isUploading) {
+                OutlinedCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.outlinedCardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("File Uploaded", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text(fileName, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                        }
+                        TextButton(onClick = { 
+                            fileUrl = ""
+                            fileName = ""
+                        }) {
+                            Text("Remove")
                         }
                     }
-                },
-                onRemoveFile = {
-                    fileUrl = ""
-                    fileName = ""
                 }
-            )
+            } else if (isUploading) {
+                 OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Text("Uploading document...")
+                    }
+                }
+            } else {
+                OutlinedButton(
+                    onClick = { filePickerLauncher.launch("*/*") },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.CloudUpload, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Upload Document")
+                }
+                Text(
+                    "Supported formats: PDF, JPG, PNG", 
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
 
@@ -175,73 +230,6 @@ fun RequestSpecialExamScreen(
                     Text("OK")
                 }
             }
-        )
-    }
-}
-
-@Composable
-fun FileUploadField(
-    fileName: String,
-    isUploading: Boolean,
-    onFileSelected: (Uri) -> Unit,
-    onRemoveFile: () -> Unit
-) {
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let { onFileSelected(it) }
-    }
-
-    Text("Supporting Document", fontWeight = FontWeight.SemiBold)
-            
-    if (fileName.isNotEmpty() && !isUploading) {
-        OutlinedCard(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.outlinedCardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            )
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.width(8.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("File Uploaded", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    Text(fileName, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
-                }
-                TextButton(onClick = onRemoveFile) {
-                    Text("Remove")
-                }
-            }
-        }
-    } else if (isUploading) {
-            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                Spacer(modifier = Modifier.width(16.dp))
-                Text("Uploading document...")
-            }
-        }
-    } else {
-        OutlinedButton(
-            onClick = { filePickerLauncher.launch("*/*") },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(Icons.Default.CloudUpload, contentDescription = null)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Upload Document")
-        }
-        Text(
-            "Supported formats: PDF, JPG, PNG", 
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
         )
     }
 }

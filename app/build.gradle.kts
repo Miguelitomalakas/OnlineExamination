@@ -72,10 +72,6 @@ dependencies {
     // Image loading
     implementation("io.coil-kt:coil-compose:2.7.0")
 
-    // Charting
-    implementation("com.github.patrykandpatrick.vico:core:1.14.0")
-    implementation("com.github.patrykandpatrick.vico:compose-m3:1.14.0")
-    
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

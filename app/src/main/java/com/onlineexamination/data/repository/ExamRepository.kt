@@ -1,5 +1,6 @@
 package com.onlineexamination.data.repository
 
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.functions.FirebaseFunctions
@@ -22,18 +23,23 @@ class ExamRepository {
             val examWithQuestionCount = exam.copy(id = docRef.id, questionCount = exam.questions.size)
             docRef.set(examWithQuestionCount).await()
 
-            // After creating the exam, send notifications
-            exam.gradeLevel.let { grade ->
-                if (grade.isNotEmpty()) {
-                    val studentTokens = getStudentTokensByGrade(grade).getOrNull()
-                    if (studentTokens?.isNotEmpty() == true) {
-                        sendNotification(
-                            tokens = studentTokens,
-                            title = "New Exam Available!",
-                            message = "A new exam \"${exam.title}\" for ${exam.subject} has been posted."
-                        ).await()
+            // After creating the exam, send notifications in a separate try-catch block
+            try {
+                exam.gradeLevel.let { grade ->
+                    if (grade.isNotEmpty()) {
+                        val studentTokens = getStudentTokensByGrade(grade).getOrNull()
+                        if (studentTokens?.isNotEmpty() == true) {
+                            sendNotification(
+                                tokens = studentTokens,
+                                title = "New Exam Available!",
+                                message = "A new exam \"${exam.title}\" for ${exam.subject} has been posted."
+                            ).await()
+                        }
                     }
                 }
+            } catch (e: Exception) {
+                // Log the exception, but don't fail the exam creation
+                println("Failed to send notification: ${e.message}")
             }
 
             Result.success(docRef.id)
@@ -82,19 +88,38 @@ class ExamRepository {
         }
     }
 
-    // Get all active exams
-    suspend fun getActiveExams(): Result<List<Exam>> {
+    suspend fun getActiveExamsForStudent(studentId: String): Result<List<Exam>> {
         return try {
+            val studentProfile = usersCollection.document(studentId).collection("profiles").document("student").get().await()
+            val gradeLevel = if (studentProfile.exists()) {
+                studentProfile.getString("gradeLevelToEnroll") ?: ""
+            } else {
+                ""
+            }
+
             val now = System.currentTimeMillis()
-            val snapshot = examsCollection
+            val gradeSpecificQuery = examsCollection
                 .whereEqualTo("isActive", true)
                 .whereGreaterThanOrEqualTo("endDate", now)
-                .orderBy("endDate", Query.Direction.ASCENDING)
+                .whereEqualTo("gradeLevel", gradeLevel)
                 .get()
                 .await()
-            
-            val exams = snapshot.documents.mapNotNull { it.toObject(Exam::class.java) }
-            Result.success(exams)
+
+            val allGradesQuery = examsCollection
+                .whereEqualTo("isActive", true)
+                .whereGreaterThanOrEqualTo("endDate", now)
+                .whereEqualTo("gradeLevel", "")
+                .get()
+                .await()
+
+            val gradeSpecificExams = gradeSpecificQuery.documents.mapNotNull { it.toObject(Exam::class.java) }
+            val allGradesExams = allGradesQuery.documents.mapNotNull { it.toObject(Exam::class.java) }
+
+            val allExams = (gradeSpecificExams + allGradesExams)
+                .distinctBy { it.id }
+                .sortedByDescending { it.createdAt }
+
+            Result.success(allExams)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -181,17 +206,27 @@ class ExamRepository {
                 score = totalScore,
                 totalPoints = exam.totalPoints,
                 percentage = percentage,
-                isPassed = isPassed
+                isPassed = isPassed,
+                examTitle = exam.title
             )
             
-            // Save attempt
-            val docRef = attemptsCollection.document()
-            val attemptWithId = submittedAttempt.copy(id = docRef.id)
-            docRef.set(attemptWithId).await()
-            
-            // Create result
+            // Use a transaction to save the attempt and update user stats atomically
+            val attemptId = firestore.runTransaction { transaction ->
+                // Save attempt
+                val docRef = attemptsCollection.document()
+                val attemptWithId = submittedAttempt.copy(id = docRef.id)
+                transaction.set(docRef, attemptWithId)
+                
+                // Update user stats for leaderboard
+                val userRef = usersCollection.document(attempt.studentId)
+                transaction.update(userRef, "totalScore", FieldValue.increment(totalScore.toLong()))
+                transaction.update(userRef, "examsTaken", FieldValue.increment(1))
+                
+                docRef.id // Return the ID to be used outside
+            }.await()
+
             val result = ExamResult(
-                attemptId = docRef.id,
+                attemptId = attemptId,
                 examId = exam.id,
                 examTitle = exam.title,
                 studentId = attempt.studentId,
@@ -222,6 +257,7 @@ class ExamRepository {
                 .await()
             
             val attempts = snapshot.documents.mapNotNull { it.toObject(ExamAttempt::class.java) }
+
             Result.success(attempts)
         } catch (e: Exception) {
             Result.failure(e)

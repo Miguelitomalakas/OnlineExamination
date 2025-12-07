@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -20,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -140,7 +142,7 @@ fun EditProfileScreen(
 
     LaunchedEffect(studentInfo) {
         studentInfo?.let {
-            studentContact = it.contactNumber
+            studentContact = it.contactNumber.removePrefix("+63")
             studentEmail = it.emailAddress.ifBlank { user.email }
             studentSection = it.section
         }
@@ -148,7 +150,7 @@ fun EditProfileScreen(
 
     LaunchedEffect(teacherInfo) {
         teacherInfo?.let {
-            teacherMobile = it.mobileNumber
+            teacherMobile = it.mobileNumber.removePrefix("+63")
             teacherEmail = it.contactEmail.ifBlank { user.email }
             teacherSubjects = it.subjectsHandled
         }
@@ -285,12 +287,10 @@ fun EditProfileScreen(
                     UserRole.STUDENT -> {
                         studentInfo?.let {
                             item {
-                                OutlinedTextField(
+                                ContactNumberField(
+                                    label = "Contact Number",
                                     value = studentContact,
-                                    onValueChange = { studentContact = it },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    label = { Text("Contact Number") },
-                                    leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null) }
+                                    onValueChange = { studentContact = it }
                                 )
                             }
                             item {
@@ -316,12 +316,10 @@ fun EditProfileScreen(
                     UserRole.TEACHER -> {
                         teacherInfo?.let {
                             item {
-                                OutlinedTextField(
+                                ContactNumberField(
+                                    label = "Mobile Number",
                                     value = teacherMobile,
-                                    onValueChange = { teacherMobile = it },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    label = { Text("Mobile Number") },
-                                    leadingIcon = { Icon(Icons.Default.PhoneAndroid, contentDescription = null) }
+                                    onValueChange = { teacherMobile = it }
                                 )
                             }
                             item {
@@ -424,7 +422,7 @@ fun EditProfileScreen(
                                                     .document("student")
                                                     .update(
                                                         mapOf(
-                                                            "contactNumber" to studentContact,
+                                                            "contactNumber" to "+63$studentContact",
                                                             "emailAddress" to studentEmail,
                                                             "section" to studentSection
                                                         )
@@ -440,7 +438,7 @@ fun EditProfileScreen(
                                                     .document("teacher")
                                                     .update(
                                                         mapOf(
-                                                            "mobileNumber" to teacherMobile,
+                                                            "mobileNumber" to "+63$teacherMobile",
                                                             "contactEmail" to teacherEmail,
                                                             "subjectsHandled" to teacherSubjects
                                                         )
@@ -479,4 +477,27 @@ fun EditProfileScreen(
     }
 }
 
+@Composable
+private fun ContactNumberField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = {
+            val digitsOnly = it.filter { char -> char.isDigit() }
+            if (digitsOnly.length <= 11) {
+                onValueChange(digitsOnly)
+            }
+        },
+        label = { Text(label) },
+        leadingIcon = { Text("+63") },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 12.dp),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        singleLine = true
+    )
+}
 

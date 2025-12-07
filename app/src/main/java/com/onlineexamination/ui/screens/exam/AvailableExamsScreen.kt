@@ -68,7 +68,7 @@ fun AvailableExamsScreen(
     var hasAttemptedMap by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
 
     LaunchedEffect(Unit) {
-        viewModel.loadActiveExams()
+        viewModel.loadActiveExamsForStudent(studentId)
     }
 
     LaunchedEffect(uiState.exams) {

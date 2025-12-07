@@ -1,6 +1,9 @@
 package com.onlineexamination.ui.screens.auth
 
+import android.net.Uri
 import android.util.Patterns
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
@@ -34,7 +37,23 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 // Lists for dropdown menus
-private val gradeLevels = listOf("Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12")
+private val gradeLevels = listOf("Grade 7", "Grade 8", "Grade 9", "Grade 10")
+private val sectionsByGrade = mapOf(
+    "Grade 7" to listOf("Sapphire", "Ruby", "Emerald"),
+    "Grade 8" to listOf("Diamond", "Gold", "Silver"),
+    "Grade 9" to listOf("Bronze", "Copper", "Steel"),
+    "Grade 10" to listOf("Platinum", "Rhodium", "Palladium")
+)
+private val subjects = listOf(
+    "Mathematics",
+    "Science",
+    "English",
+    "Filipino",
+    "Technology and Livelihood Education (TLE)",
+    "Music, Arts, Physical Education, and Health (MAPEH)",
+    "Edukasyon sa Pagpapakatao (ESP)",
+    "Araling Panlipunan (AP)"
+)
 private val employmentStatuses = listOf("Permanent", "Contractual", "Substitute", "Part-Time")
 private val positions = listOf("Teacher I", "Teacher II", "Teacher III", "Master Teacher I", "Master Teacher II", "Master Teacher III", "Master Teacher IV", "Professor", "Instructor", "Others")
 private val gradeLevelAssignments = listOf("Kindergarten", "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12", "College")
@@ -61,6 +80,9 @@ fun SignUpScreen(
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var selectedRole by remember { mutableStateOf(UserRole.STUDENT) }
+    var showAdminCodeField by remember { mutableStateOf(false) }
+    var adminCode by remember { mutableStateOf("") }
+    var showAdminRole by remember { mutableStateOf(false) }
 
     var studentForm by remember { mutableStateOf(StudentForm()) }
     var teacherForm by remember { mutableStateOf(TeacherForm()) }
@@ -174,17 +196,33 @@ fun SignUpScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     when (currentStep) {
-                        0 -> AccountInformationStep(username, { if (it.isMeaningful()) username = it }, email, { email = it.replace(" ", "") }, password, { password = it }, confirmPassword, { confirmPassword = it }, selectedRole) {
-                            selectedRole = it
-                            if (it == UserRole.TEACHER && teacherForm.contactEmail.isBlank()) {
-                                teacherForm = teacherForm.copy(contactEmail = email)
-                            }
-                        }
+                        0 -> AccountInformationStep(
+                            username, { if (it.isMeaningful()) username = it },
+                            email, { email = it.replace(" ", "") },
+                            password, { password = it },
+                            confirmPassword, { confirmPassword = it },
+                            selectedRole, { newRole ->
+                                selectedRole = newRole
+                                if (newRole == UserRole.TEACHER && teacherForm.contactEmail.isBlank()) {
+                                    teacherForm = teacherForm.copy(contactEmail = email)
+                                }
+                            },
+                            showAdminCodeField, { showAdminCodeField = it },
+                            adminCode, { 
+                                adminCode = it
+                                // Validate admin code
+                                showAdminRole = it.trim().equals("0814QWERTY", ignoreCase = false)
+                                if (!showAdminRole && selectedRole == UserRole.ADMIN) {
+                                    selectedRole = UserRole.STUDENT
+                                }
+                            },
+                            showAdminRole
+                        )
                         1 -> if (isStudent) StudentPersonalInformationStep(studentForm) { studentForm = it.copy(age = calculateAgeFromDob(it.dateOfBirth)) } else TeacherPersonalInformationStep(teacherForm) { teacherForm = it.copy(age = calculateAgeFromDob(it.dateOfBirth)) }
                         2 -> if (isStudent) StudentAddressInformationStep(studentForm, provinces) { studentForm = it } else TeacherContactInformationStep(teacherForm, provinces) { teacherForm = it }
                         3 -> if (isStudent) StudentParentInformationStep(studentForm) { studentForm = it } else TeacherProfessionalInformationStep(teacherForm) { teacherForm = it }
                         4 -> if (isStudent) StudentSchoolInformationStep(studentForm) { studentForm = it } else TeacherEducationInformationStep(teacherForm) { teacherForm = it }
-                        5 -> TeacherHealthAndUploadsStep(teacherForm) { teacherForm = it }
+                        5 -> TeacherHealthAndUploadsStep(teacherForm, viewModel) { teacherForm = it }
                     }
                 }
             }
@@ -240,7 +278,10 @@ private fun AccountInformationStep(
     email: String, onEmailChange: (String) -> Unit,
     password: String, onPasswordChange: (String) -> Unit,
     confirmPassword: String, onConfirmPasswordChange: (String) -> Unit,
-    selectedRole: UserRole, onRoleSelected: (UserRole) -> Unit
+    selectedRole: UserRole, onRoleSelected: (UserRole) -> Unit,
+    showAdminCodeField: Boolean, onShowAdminCodeFieldChange: (Boolean) -> Unit,
+    adminCode: String, onAdminCodeChange: (String) -> Unit,
+    showAdminRole: Boolean
 ) {
     SectionHeader("Account Information")
     LabeledField("Username", username, leadingIcon = { Icon(Icons.Default.Person, null) }) { onUsernameChange(it) }
@@ -255,10 +296,77 @@ private fun AccountInformationStep(
         Text("Passwords do not match.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
     }
 
+    // Admin Button
+    if (!showAdminCodeField) {
+        OutlinedButton(
+            onClick = { onShowAdminCodeFieldChange(true) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp, bottom = 8.dp)
+        ) {
+            Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Admin")
+        }
+    }
+
+    // Admin Code Field (shown when admin button is clicked)
+    if (showAdminCodeField) {
+        OutlinedTextField(
+            value = adminCode,
+            onValueChange = onAdminCodeChange,
+            label = { Text("Admin Code") },
+            leadingIcon = { Icon(Icons.Default.Lock, null) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp, bottom = 8.dp),
+            singleLine = true,
+            placeholder = { Text("Enter admin code") },
+            trailingIcon = {
+                IconButton(onClick = { 
+                    onShowAdminCodeFieldChange(false)
+                    onAdminCodeChange("")
+                }) {
+                    Icon(Icons.Default.Cancel, contentDescription = "Close")
+                }
+            }
+        )
+        
+        if (adminCode.isNotEmpty() && !showAdminRole) {
+            Text(
+                text = "Invalid admin code",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+            )
+        }
+        
+        if (showAdminRole) {
+            Text(
+                text = "✓ Admin code verified. You can now select Admin role.",
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+
     Text("Select Role", style = MaterialTheme.typography.titleMedium, modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp))
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        UserRole.values().filter { it != UserRole.ADMIN }.forEach { role ->
-            FilterChip(selected = selectedRole == role, onClick = { onRoleSelected(role) }, label = { Text(role.name) }, modifier = Modifier.weight(1f))
+        // Show all roles including ADMIN if code is correct
+        val rolesToShow = if (showAdminRole) {
+            UserRole.values().toList()
+        } else {
+            UserRole.values().filter { it != UserRole.ADMIN }
+        }
+        rolesToShow.forEach { role: UserRole ->
+            FilterChip(
+                selected = selectedRole == role,
+                onClick = { onRoleSelected(role) },
+                label = { Text(text = role.name) },
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }
@@ -300,7 +408,7 @@ private fun StudentAddressInformationStep(form: StudentForm, provinces: List<com
     )
     TwoColumn(
         { LabeledField("ZIP Code", form.zipCode, KeyboardType.Number) { onFormChange(form.copy(zipCode = it)) } },
-        { LabeledField("Contact Number", form.contactNumber, KeyboardType.Phone) { onFormChange(form.copy(contactNumber = it)) } }
+        { ContactNumberField("Contact Number", form.contactNumber) { onFormChange(form.copy(contactNumber = it)) } }
     )
 }
 
@@ -311,29 +419,30 @@ private fun StudentParentInformationStep(form: StudentForm, onFormChange: (Stude
     LabeledField("Full Name", form.fatherName) { onFormChange(form.copy(fatherName = it)) }
     TwoColumn(
         { LabeledField("Occupation", form.fatherOccupation) { onFormChange(form.copy(fatherOccupation = it)) } },
-        { LabeledField("Contact Number", form.fatherContact, KeyboardType.Phone) { onFormChange(form.copy(fatherContact = it)) } }
+        { ContactNumberField("Contact Number", form.fatherContact) { onFormChange(form.copy(fatherContact = it)) } }
     )
     Text("Mother's Information", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
     LabeledField("Maiden Name", form.motherName) { onFormChange(form.copy(motherName = it)) }
     TwoColumn(
         { LabeledField("Occupation", form.motherOccupation) { onFormChange(form.copy(motherOccupation = it)) } },
-        { LabeledField("Contact Number", form.motherContact, KeyboardType.Phone) { onFormChange(form.copy(motherContact = it)) } }
+        { ContactNumberField("Contact Number", form.motherContact) { onFormChange(form.copy(motherContact = it)) } }
     )
     Text("Guardian (Optional)", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
     LabeledField("Full Name", form.guardianName) { onFormChange(form.copy(guardianName = it)) }
     TwoColumn(
         { DropdownField("Relationship", form.guardianRelationship, relationshipTypes.map { DropdownOption(it, it) }) { onFormChange(form.copy(guardianRelationship = it.key)) } },
-        { LabeledField("Contact Number", form.guardianContact, KeyboardType.Phone) { onFormChange(form.copy(guardianContact = it)) } }
+        { ContactNumberField("Contact Number", form.guardianContact) { onFormChange(form.copy(guardianContact = it)) } }
     )
     LabeledField("Address", form.guardianAddress) { onFormChange(form.copy(guardianAddress = it)) }
 }
 
 @Composable
 private fun StudentSchoolInformationStep(form: StudentForm, onFormChange: (StudentForm) -> Unit) {
+    val sections = sectionsByGrade[form.gradeLevel] ?: emptyList()
     SectionHeader("School Information")
-    DropdownField("Grade Level to Enroll", form.gradeLevel, gradeLevels.map { DropdownOption(it, it) }) { onFormChange(form.copy(gradeLevel = it.key)) }
+    DropdownField("Grade Level to Enroll", form.gradeLevel, gradeLevels.map { DropdownOption(it, it) }) { onFormChange(form.copy(gradeLevel = it.key, section = "")) }
+    DropdownField("Section", form.section, sections.map { DropdownOption(it, it) }, enabled = sections.isNotEmpty()) { onFormChange(form.copy(section = it.key)) }
     LabeledField("School Year", form.schoolYear) { onFormChange(form.copy(schoolYear = it)) }
-    LabeledField("Section (if assigned)", form.section) { onFormChange(form.copy(section = it)) }
     LabeledField("Previous School", form.previousSchool) { onFormChange(form.copy(previousSchool = it)) }
     LabeledField("Previous School Address", form.previousSchoolAddress) { onFormChange(form.copy(previousSchoolAddress = it)) }
     LabeledField("School ID (optional)", form.schoolId) { onFormChange(form.copy(schoolId = it)) }
@@ -379,7 +488,7 @@ private fun TeacherContactInformationStep(form: TeacherForm, provinces: List<com
     )
     TwoColumn(
         { LabeledField("ZIP Code", form.zipCode, KeyboardType.Number) { onFormChange(form.copy(zipCode = it)) } },
-        { LabeledField("Mobile Number", form.mobileNumber, KeyboardType.Phone) { onFormChange(form.copy(mobileNumber = it)) } }
+        { ContactNumberField("Mobile Number", form.mobileNumber) { onFormChange(form.copy(mobileNumber = it)) } }
     )
     TwoColumn(
         { LabeledField("Landline (Optional)", form.landlineNumber, KeyboardType.Phone) { onFormChange(form.copy(landlineNumber = it)) } },
@@ -391,7 +500,7 @@ private fun TeacherContactInformationStep(form: TeacherForm, provinces: List<com
 private fun TeacherProfessionalInformationStep(form: TeacherForm, onFormChange: (TeacherForm) -> Unit) {
     SectionHeader("Professional Information")
     DropdownField("Position / Designation", form.position, positions.map { DropdownOption(it, it) }) { onFormChange(form.copy(position = it.key)) }
-    LabeledField("Subjects Handled", form.subjectsHandled) { onFormChange(form.copy(subjectsHandled = it)) }
+    MultiSelectDropdownField("Subjects Handled", form.subjectsHandled, subjects.map { DropdownOption(it, it) }) { onFormChange(form.copy(subjectsHandled = it)) }
     DropdownField("Grade Level Assigned", form.gradeLevelAssigned, gradeLevelAssignments.map { DropdownOption(it, it) }) { onFormChange(form.copy(gradeLevelAssigned = it.key)) }
     LabeledField("Department / Strand", form.department) { onFormChange(form.copy(department = it)) }
     LabeledField("School Assigned", form.schoolAssigned) { onFormChange(form.copy(schoolAssigned = it)) }
@@ -411,7 +520,11 @@ private fun TeacherEducationInformationStep(form: TeacherForm, onFormChange: (Te
 }
 
 @Composable
-private fun TeacherHealthAndUploadsStep(form: TeacherForm, onFormChange: (TeacherForm) -> Unit) {
+private fun TeacherHealthAndUploadsStep(form: TeacherForm, viewModel: AuthViewModel, onFormChange: (TeacherForm) -> Unit) {
+    var isUploadingPrc by remember { mutableStateOf(false) }
+    var isUploadingDiploma by remember { mutableStateOf(false) }
+    var isUploadingPhoto by remember { mutableStateOf(false) }
+
     SectionHeader("Health & Emergency")
     TwoColumn(
         { DropdownField("Blood Type", form.bloodType, bloodTypes.map { DropdownOption(it, it) }) { onFormChange(form.copy(bloodType = it.key)) } },
@@ -422,13 +535,55 @@ private fun TeacherHealthAndUploadsStep(form: TeacherForm, onFormChange: (Teache
     LabeledField("Full Name", form.emergencyContactName) { onFormChange(form.copy(emergencyContactName = it)) }
     TwoColumn(
         { DropdownField("Relationship", form.emergencyContactRelationship, relationshipTypes.map { DropdownOption(it, it) }) { onFormChange(form.copy(emergencyContactRelationship = it.key)) } },
-        { LabeledField("Contact Number", form.emergencyContactNumber, KeyboardType.Phone) { onFormChange(form.copy(emergencyContactNumber = it)) } }
+        { ContactNumberField("Contact Number", form.emergencyContactNumber) { onFormChange(form.copy(emergencyContactNumber = it)) } }
     )
 
-    SectionHeader("File Uploads (Link or Reference)")
-    LabeledField("PRC License / Eligibility", form.prcLicenseFile) { onFormChange(form.copy(prcLicenseFile = it)) }
-    LabeledField("Diploma / Transcript", form.diplomaFile) { onFormChange(form.copy(diplomaFile = it)) }
-    LabeledField("1x1 ID Photo", form.idPhotoFile) { onFormChange(form.copy(idPhotoFile = it)) }
+    SectionHeader("File Uploads")
+    FileUploadField(
+        label = "PRC License / Eligibility",
+        fileName = form.prcLicenseFile,
+        isUploading = isUploadingPrc,
+        onFileSelected = {
+            isUploadingPrc = true
+            viewModel.uploadFile(it) { url ->
+                isUploadingPrc = false
+                if (url != null) {
+                    onFormChange(form.copy(prcLicenseFile = url))
+                }
+            }
+        },
+        onRemoveFile = { onFormChange(form.copy(prcLicenseFile = "")) }
+    )
+    FileUploadField(
+        label = "Diploma / Transcript",
+        fileName = form.diplomaFile,
+        isUploading = isUploadingDiploma,
+        onFileSelected = {
+            isUploadingDiploma = true
+            viewModel.uploadFile(it) { url ->
+                isUploadingDiploma = false
+                if (url != null) {
+                    onFormChange(form.copy(diplomaFile = url))
+                }
+            }
+        },
+        onRemoveFile = { onFormChange(form.copy(diplomaFile = "")) }
+    )
+    FileUploadField(
+        label = "1x1 ID Photo",
+        fileName = form.idPhotoFile,
+        isUploading = isUploadingPhoto,
+        onFileSelected = {
+            isUploadingPhoto = true
+            viewModel.uploadFile(it) { url ->
+                isUploadingPhoto = false
+                if (url != null) {
+                    onFormChange(form.copy(idPhotoFile = url))
+                }
+            }
+        },
+        onRemoveFile = { onFormChange(form.copy(idPhotoFile = "")) }
+    )
 }
 
 // --- Reusable Composables ---
@@ -464,6 +619,30 @@ private fun LabeledField(
             .fillMaxWidth()
             .padding(bottom = 12.dp),
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        singleLine = true
+    )
+}
+
+@Composable
+private fun ContactNumberField(
+    label: String,
+    value: String,
+    onChange: (String) -> Unit
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = {
+            val digitsOnly = it.filter { char -> char.isDigit() }
+            if (digitsOnly.length <= 11) {
+                onChange(digitsOnly)
+            }
+        },
+        label = { Text(label) },
+        leadingIcon = { Text("+63") },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 12.dp),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         singleLine = true
     )
 }
@@ -572,6 +751,72 @@ private fun DropdownField(
 }
 
 @Composable
+private fun MultiSelectDropdownField(
+    label: String,
+    selectedKeys: String,
+    options: List<DropdownOption>,
+    onOptionSelected: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selectedLabels = selectedKeys.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+    var textFieldSize by remember { mutableStateOf(IntSize.Zero) }
+    val density = LocalDensity.current
+
+    Box(modifier = Modifier
+        .fillMaxWidth()
+        .padding(bottom = 12.dp)) {
+        OutlinedTextField(
+            value = selectedLabels.joinToString(", "),
+            onValueChange = {},
+            label = { Text(label) },
+            readOnly = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .onGloballyPositioned { textFieldSize = it.size },
+            trailingIcon = {
+                Icon(
+                    Icons.Default.ArrowDropDown,
+                    "Dropdown",
+                    Modifier.clickable { expanded = true }
+                )
+            }
+        )
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.width(with(density) { textFieldSize.width.toDp() })
+        ) {
+            options.forEach { option ->
+                DropdownMenuItem(text = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = selectedLabels.contains(option.key),
+                            onCheckedChange = {
+                                val newSelection = if (selectedLabels.contains(option.key)) {
+                                    selectedLabels.filter { it != option.key }
+                                } else {
+                                    selectedLabels + option.key
+                                }
+                                onOptionSelected(newSelection.joinToString(", "))
+                            }
+                        )
+                        Text(option.label)
+                    }
+                }, onClick = {
+                    val newSelection = if (selectedLabels.contains(option.key)) {
+                        selectedLabels.filter { it != option.key }
+                    } else {
+                        selectedLabels + option.key
+                    }
+                    onOptionSelected(newSelection.joinToString(", "))
+                })
+            }
+        }
+    }
+}
+
+@Composable
 private fun GenderSelection(selectedGender: String, onGenderChange: (String) -> Unit) {
     Column(modifier = Modifier.padding(bottom = 12.dp)) {
         Text("Gender / Sex", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(bottom = 8.dp))
@@ -653,6 +898,74 @@ private fun PasswordField(label: String, value: String, onValueChange: (String) 
     )
 }
 
+@Composable
+fun FileUploadField(
+    label: String,
+    fileName: String,
+    isUploading: Boolean,
+    onFileSelected: (Uri) -> Unit,
+    onRemoveFile: () -> Unit
+) {
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { onFileSelected(it) }
+    }
+
+    Text(label, fontWeight = FontWeight.SemiBold)
+            
+    if (fileName.isNotEmpty() && !isUploading) {
+        OutlinedCard(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.outlinedCardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(8.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("File Uploaded", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(fileName, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                }
+                TextButton(onClick = onRemoveFile) {
+                    Text("Remove")
+                }
+            }
+        }
+    } else if (isUploading) {
+            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                Spacer(modifier = Modifier.width(16.dp))
+                Text("Uploading file...")
+            }
+        }
+    } else {
+        OutlinedButton(
+            onClick = { filePickerLauncher.launch("*/*") },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Default.CloudUpload, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Upload File")
+        }
+        Text(
+            "Supported formats: PDF, JPG, PNG", 
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+        )
+    }
+}
+
 // --- Data Classes and Mappers ---
 private data class DropdownOption(val key: String, val label: String)
 
@@ -673,10 +986,10 @@ data class StudentForm(
         suffix = suffix.trimmedOrEmpty(), sex = gender, dateOfBirth = dateOfBirth, placeOfBirth = placeOfBirth.trimmedOrEmpty(),
         age = age, religion = religion.trimmedOrEmpty(), nationality = nationality.trimmedOrEmpty(), houseStreet = houseStreet.trimmedOrEmpty(),
         barangay = barangayName.trimmedOrEmpty(), cityMunicipality = municipalityName, province = provinceName,
-        zipCode = zipCode.trimmedOrEmpty(), contactNumber = contactNumber.trimmedOrEmpty(), emailAddress = contactEmail.trim(),
-        fatherFullName = fatherName.trimmedOrEmpty(), fatherOccupation = fatherOccupation.trimmedOrEmpty(), fatherContact = fatherContact.trimmedOrEmpty(),
-        motherMaidenName = motherName.trimmedOrEmpty(), motherOccupation = motherOccupation.trimmedOrEmpty(), motherContact = motherContact.trimmedOrEmpty(),
-        guardianFullName = guardianName.trimmedOrEmpty(), guardianRelationship = guardianRelationship.trimmedOrEmpty(), guardianContact = guardianContact.trimmedOrEmpty(),
+        zipCode = zipCode.trimmedOrEmpty(), contactNumber = "+63${contactNumber.trimmedOrEmpty()}", emailAddress = contactEmail.trim(),
+        fatherFullName = fatherName.trimmedOrEmpty(), fatherOccupation = fatherOccupation.trimmedOrEmpty(), fatherContact = "+63${fatherContact.trimmedOrEmpty()}",
+        motherMaidenName = motherName.trimmedOrEmpty(), motherOccupation = motherOccupation.trimmedOrEmpty(), motherContact = "+63${motherContact.trimmedOrEmpty()}",
+        guardianFullName = guardianName.trimmedOrEmpty(), guardianRelationship = guardianRelationship.trimmedOrEmpty(), guardianContact = "+63${guardianContact.trimmedOrEmpty()}",
         guardianAddress = guardianAddress.trimmedOrEmpty(), gradeLevelToEnroll = gradeLevel.trimmedOrEmpty(), schoolYear = schoolYear.trimmedOrEmpty(),
         section = section.trimmedOrEmpty(), previousSchool = previousSchool.trimmedOrEmpty(), previousSchoolAddress = previousSchoolAddress.trimmedOrEmpty(),
         schoolId = schoolId.trimmedOrEmpty(), schoolType = schoolType.trimmedOrEmpty()
@@ -703,7 +1016,7 @@ data class TeacherForm(
         suffix = suffix.trimmedOrEmpty(), gender = gender, dateOfBirth = dateOfBirth, age = age, nationality = nationality.trimmedOrEmpty(),
         civilStatus = civilStatus.trimmedOrEmpty(), religion = religion.trimmedOrEmpty(), addressHouseStreet = addressHouseStreet.trimmedOrEmpty(),
         addressBarangay = addressBarangayName.trimmedOrEmpty(), addressCityMunicipality = municipalityName, addressProvince = provinceName,
-        addressZipCode = zipCode.trimmedOrEmpty(), mobileNumber = mobileNumber.trimmedOrEmpty(), landlineNumber = landlineNumber.trimmedOrEmpty(),
+        addressZipCode = zipCode.trimmedOrEmpty(), mobileNumber = "+63${mobileNumber.trimmedOrEmpty()}", landlineNumber = landlineNumber.trimmedOrEmpty(),
         contactEmail = contactEmail.trim().ifBlank { email.trim() }, position = position.trimmedOrEmpty(),
         subjectsHandled = subjectsHandled.trimmedOrEmpty(), gradeLevelAssigned = gradeLevelAssigned.trimmedOrEmpty(),
         department = department.trimmedOrEmpty(), schoolAssigned = schoolAssigned.trimmedOrEmpty(), prcLicenseNumber = prcLicenseNumber.trimmedOrEmpty(),
@@ -712,7 +1025,7 @@ data class TeacherForm(
         educationSchoolName = educationSchoolName.trimmedOrEmpty(), educationYearGraduated = educationYearGraduated.trimmedOrEmpty(),
         trainings = trainings.trimmedOrEmpty(), bloodType = bloodType.trimmedOrEmpty(), allergies = allergies.trimmedOrEmpty(),
         emergencyContactName = emergencyContactName.trimmedOrEmpty(), emergencyContactRelationship = emergencyContactRelationship.trimmedOrEmpty(),
-        emergencyContactNumber = emergencyContactNumber.trimmedOrEmpty(), vaccinationStatus = vaccinationStatus.trimmedOrEmpty(),
+        emergencyContactNumber = "+63${emergencyContactNumber.trimmedOrEmpty()}", vaccinationStatus = vaccinationStatus.trimmedOrEmpty(),
         prcLicenseFile = prcLicenseFile.trimmedOrEmpty(), diplomaFile = diplomaFile.trimmedOrEmpty(), idPhotoFile = idPhotoFile.trimmedOrEmpty()
     )
 }

@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -14,27 +15,26 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.onlineexamination.data.model.UserRole
+import com.onlineexamination.ui.screens.admin.AdminManageExamsScreen
+import com.onlineexamination.ui.screens.admin.AdminSettingsScreen
+import com.onlineexamination.ui.screens.admin.AnalyticsScreen
+import com.onlineexamination.ui.screens.admin.ManageUsersScreen
 import com.onlineexamination.ui.screens.auth.ForgotPasswordScreen
 import com.onlineexamination.ui.screens.auth.LoginScreen
 import com.onlineexamination.ui.screens.auth.PendingVerificationScreen
 import com.onlineexamination.ui.screens.auth.SignUpScreen
 import com.onlineexamination.ui.screens.dashboard.AdminDashboard
 import com.onlineexamination.ui.screens.dashboard.StudentDashboard
-import com.onlineexamination.ui.screens.dashboard.TeacherDashboard
 import com.onlineexamination.ui.screens.dashboard.TeacherAnalyticsScreen
+import com.onlineexamination.ui.screens.dashboard.TeacherDashboard
 import com.onlineexamination.ui.screens.exam.*
-import com.onlineexamination.ui.screens.admin.ManageUsersScreen
-import com.onlineexamination.ui.screens.admin.AnalyticsScreen
-import com.onlineexamination.ui.screens.admin.AdminManageExamsScreen
-import com.onlineexamination.ui.screens.admin.AdminSettingsScreen
-import com.onlineexamination.ui.screens.profile.ProfileScreen
 import com.onlineexamination.ui.screens.profile.EditProfileScreen
+import com.onlineexamination.ui.screens.profile.ProfileScreen
 import com.onlineexamination.ui.screens.student.LeaderboardScreen
 import com.onlineexamination.ui.screens.student.StudyMaterialsScreen
 import com.onlineexamination.ui.screens.teacher.StudentLogsScreen
 import com.onlineexamination.ui.viewmodel.AuthViewModel
 import com.onlineexamination.ui.viewmodel.ExamViewModel
-import androidx.lifecycle.viewmodel.compose.viewModel
 
 sealed class Screen(val route: String) {
     object Login : Screen("login")
@@ -52,10 +52,12 @@ sealed class Screen(val route: String) {
     object TakeExam : Screen("take_exam/{examId}") {
         fun createRoute(examId: String) = "take_exam/$examId"
     }
+
     object StudentResults : Screen("student_results")
     object ResultDetail : Screen("result_detail/{attemptId}/{examId}") {
         fun createRoute(attemptId: String, examId: String) = "result_detail/$attemptId/$examId"
     }
+
     object RequestSpecialExam : Screen("request_special_exam/{examId}/{examTitle}") {
         fun createRoute(examId: String, examTitle: String) = "request_special_exam/$examId/$examTitle"
     }
@@ -66,12 +68,15 @@ sealed class Screen(val route: String) {
     object EditExam : Screen("edit_exam/{examId}") {
         fun createRoute(examId: String) = "edit_exam/$examId"
     }
+
     object ExamResults : Screen("exam_results/{examId}") {
         fun createRoute(examId: String) = "exam_results/$examId"
     }
+
     object ItemAnalysis : Screen("item_analysis/{examId}") {
         fun createRoute(examId: String) = "item_analysis/$examId"
     }
+
     object StudentLogs : Screen("student_logs/{studentId}/{studentName}") {
         fun createRoute(studentId: String, studentName: String) = "student_logs/$studentId/$studentName"
     }
@@ -95,6 +100,7 @@ fun NavGraph(
     startDestination: String = Screen.Login.route
 ) {
     val uiState by authViewModel.uiState.collectAsState()
+    val examViewModel: ExamViewModel = viewModel()
 
     // Check authentication state and navigate accordingly
     LaunchedEffect(uiState.currentUser, uiState.userData) {
@@ -221,7 +227,6 @@ fun NavGraph(
 
         composable(Screen.AvailableExams.route) {
             uiState.userData?.let { user ->
-                val examViewModel: ExamViewModel = viewModel()
                 AvailableExamsScreen(
                     studentId = user.uid,
                     viewModel = examViewModel,
@@ -263,7 +268,6 @@ fun NavGraph(
         ) { backStackEntry ->
             uiState.userData?.let { user ->
                 val examId = backStackEntry.arguments?.getString("examId") ?: return@let
-                val examViewModel: ExamViewModel = viewModel()
                 TakeExamScreen(
                     examId = examId,
                     studentId = user.uid,
@@ -271,8 +275,8 @@ fun NavGraph(
                     studentEmail = user.email,
                     viewModel = examViewModel,
                     onBack = { navController.popBackStack() },
-                    onExamSubmitted = {
-                        navController.navigate(Screen.StudentResults.route) {
+                    onExamSubmitted = { attemptId ->
+                        navController.navigate(Screen.ResultDetail.createRoute(attemptId, examId)) {
                             popUpTo(Screen.StudentDashboard.route)
                         }
                     }
@@ -282,7 +286,6 @@ fun NavGraph(
 
         composable(Screen.StudentResults.route) {
             uiState.userData?.let { user ->
-                val examViewModel: ExamViewModel = viewModel()
                 StudentResultsScreen(
                     studentId = user.uid,
                     viewModel = examViewModel,
@@ -302,7 +305,7 @@ fun NavGraph(
                 )
             }
         }
-        
+
         composable(Screen.Leaderboards.route) {
             LeaderboardScreen(onBack = { navController.popBackStack() })
         }
@@ -316,7 +319,6 @@ fun NavGraph(
         ) { backStackEntry ->
             val attemptId = backStackEntry.arguments?.getString("attemptId") ?: return@composable
             val examId = backStackEntry.arguments?.getString("examId") ?: return@composable
-            val examViewModel: ExamViewModel = viewModel()
             ResultDetailScreen(
                 attemptId = attemptId,
                 examId = examId,
@@ -357,14 +359,15 @@ fun NavGraph(
 
         composable(Screen.CreateExam.route) {
             uiState.userData?.let { user ->
-                val examViewModel: ExamViewModel = viewModel()
                 CreateExamScreen(
                     teacherId = user.uid,
                     teacherName = user.username,
                     viewModel = examViewModel,
                     onBack = { navController.popBackStack() },
                     onExamCreated = {
-                        navController.popBackStack()
+                        navController.navigate(Screen.ViewExams.route) {
+                            popUpTo(Screen.CreateExam.route) { inclusive = true }
+                        }
                     }
                 )
             }
@@ -381,14 +384,10 @@ fun NavGraph(
 
         composable(Screen.ViewExams.route) {
             uiState.userData?.let { user ->
-                val examViewModel: ExamViewModel = viewModel()
                 ViewExamsScreen(
                     teacherId = user.uid,
                     viewModel = examViewModel,
                     onBack = { navController.popBackStack() },
-                    onExamClick = { examId ->
-                        navController.navigate(Screen.EditExam.createRoute(examId))
-                    },
                     onViewResults = { examId ->
                         navController.navigate(Screen.ExamResults.createRoute(examId))
                     },
@@ -403,19 +402,15 @@ fun NavGraph(
             route = Screen.EditExam.route,
             arguments = listOf(navArgument("examId") { type = NavType.StringType })
         ) { backStackEntry ->
-            uiState.userData?.let { user ->
-                val examId = backStackEntry.arguments?.getString("examId") ?: return@let
-                val examViewModel: ExamViewModel = viewModel()
-                EditExamScreen(
-                    examId = examId,
-                    teacherId = user.uid,
-                    viewModel = examViewModel,
-                    onBack = { navController.popBackStack() },
-                    onExamUpdated = {
-                        navController.popBackStack()
-                    }
-                )
-            }
+            val examId = backStackEntry.arguments?.getString("examId") ?: return@composable
+            EditExamScreen(
+                examId = examId,
+                viewModel = examViewModel,
+                onBack = { navController.popBackStack() },
+                onExamUpdated = {
+                    navController.popBackStack()
+                }
+            )
         }
 
         composable(
@@ -423,13 +418,12 @@ fun NavGraph(
             arguments = listOf(navArgument("examId") { type = NavType.StringType })
         ) { backStackEntry ->
             val examId = backStackEntry.arguments?.getString("examId") ?: return@composable
-            val examViewModel: ExamViewModel = viewModel()
             var examTitle by remember { mutableStateOf("Exam Results") }
             LaunchedEffect(examId) {
                 examViewModel.loadExamById(examId)
             }
-            val uiState by examViewModel.uiState.collectAsState()
-            examTitle = uiState.currentExam?.title ?: "Exam Results"
+            val examUiState by examViewModel.uiState.collectAsState()
+            examTitle = examUiState.currentExam?.title ?: "Exam Results"
 
             ExamResultsScreen(
                 examId = examId,

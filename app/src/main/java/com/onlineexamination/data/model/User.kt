@@ -9,7 +9,10 @@ data class User(
     val emailVerified: Boolean = false,
     val isVerified: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
-    val fcmToken: String = ""
+    val fcmToken: String = "",
+    // Leaderboard stats
+    val totalScore: Int = 0,
+    val examsTaken: Int = 0
 )
 
 enum class UserRole {
@@ -102,4 +105,3 @@ data class TeacherInfo(
     val diplomaFile: String = "",
     val idPhotoFile: String = ""
 )
-

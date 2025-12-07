@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,35 +47,44 @@ fun TeacherDashboard(
     var studentCount by remember { mutableStateOf(0) }
     var isLoadingStats by remember { mutableStateOf(true) }
 
-    LaunchedEffect(user.uid) {
-        try {
-            val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-            val examsSnapshot = firestore.collection("exams")
-                .whereEqualTo("teacherId", user.uid)
-                .get()
-                .await()
-            examCount = examsSnapshot.size()
+    DisposableEffect(user.uid) {
+        val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        
+        val examsListener = firestore.collection("exams")
+            .whereEqualTo("teacherId", user.uid)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+                if (snapshot != null) {
+                    examCount = snapshot.size()
+                }
+            }
 
-            // Count unique students who attempted teacher's exams
-            val attemptsSnapshot = firestore.collection("exam_attempts")
-                .whereNotEqualTo("submittedAt", null)
-                .get()
-                .await()
-            
-            val examIds = examsSnapshot.documents.map { it.id }.toSet()
-            val uniqueStudents = attemptsSnapshot.documents
-                .mapNotNull { it.toObject(com.onlineexamination.data.model.ExamAttempt::class.java) }
-                .filter { it.examId in examIds }
-                .map { it.studentId }
-                .distinct()
-                .count()
-            
-            studentCount = uniqueStudents
-            isLoadingStats = false
-        } catch (e: Exception) {
-            isLoadingStats = false
+        val attemptsListener = firestore.collection("exam_attempts")
+            .whereEqualTo("teacherId", user.uid)
+            .whereNotEqualTo("submittedAt", null)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    isLoadingStats = false
+                    return@addSnapshotListener
+                }
+                
+                if (snapshot != null) {
+                    val uniqueStudents = snapshot.documents
+                        .mapNotNull { it.getString("studentId") }
+                        .distinct()
+                        .count()
+                    
+                    studentCount = uniqueStudents
+                    isLoadingStats = false
+                }
+            }
+
+        onDispose {
+            examsListener.remove()
+            attemptsListener.remove()
         }
     }
+
     val gradientBrush = Brush.verticalGradient(
         listOf(
             TeacherGradientStart,
@@ -277,4 +287,3 @@ fun getTeacherQuickActions(): List<QuickAction> {
         QuickAction("Analytics", Icons.Default.Analytics)
     )
 }
-

@@ -72,7 +72,7 @@ fun TakeExamScreen(
     viewModel: ExamViewModel,
     logViewModel: LogViewModel = viewModel(),
     onBack: () -> Unit,
-    onExamSubmitted: () -> Unit
+    onExamSubmitted: (String) -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var answers by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
@@ -185,8 +185,8 @@ fun TakeExamScreen(
     }
 
     LaunchedEffect(uiState.currentResult) {
-        if (uiState.currentResult != null) {
-            onExamSubmitted()
+        uiState.currentResult?.let { result ->
+            onExamSubmitted(result.attemptId)
         }
     }
 
@@ -442,6 +442,7 @@ private fun triggerSubmission(
 
     val attempt = ExamAttempt(
         examId = exam.id,
+        teacherId = exam.teacherId, // Added teacherId from exam
         studentId = studentId,
         studentName = studentName,
         studentEmail = studentEmail,

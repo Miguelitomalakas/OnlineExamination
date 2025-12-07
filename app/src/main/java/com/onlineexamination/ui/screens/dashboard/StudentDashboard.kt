@@ -37,6 +37,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -70,33 +71,40 @@ fun StudentDashboard(
     var averageScore by remember { mutableStateOf<String?>(null) }
     var isLoadingStats by remember { mutableStateOf(true) }
 
-    LaunchedEffect(user.uid) {
-        try {
-            val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-            val attemptsSnapshot = firestore.collection("exam_attempts")
-                .whereEqualTo("studentId", user.uid)
-                .whereNotEqualTo("submittedAt", null)
-                .get()
-                .await()
+    DisposableEffect(user.uid) {
+        val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        val listener = firestore.collection("exam_attempts")
+            .whereEqualTo("studentId", user.uid)
+            .whereNotEqualTo("submittedAt", null)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    isLoadingStats = false
+                    return@addSnapshotListener
+                }
+                
+                if (snapshot != null) {
+                    examsTaken = snapshot.size()
+                    
+                    val attempts = snapshot.documents.mapNotNull { 
+                        it.toObject(com.onlineexamination.data.model.ExamAttempt::class.java) 
+                    }
 
-            examsTaken = attemptsSnapshot.size()
-
-            val attempts = attemptsSnapshot.documents.mapNotNull { 
-                it.toObject(com.onlineexamination.data.model.ExamAttempt::class.java) 
+                    if (attempts.isNotEmpty()) {
+                        val totalPercentage = attempts.sumOf { it.percentage }
+                        val avg = totalPercentage / attempts.size
+                        averageScore = String.format("%.1f", avg)
+                    } else {
+                        averageScore = "N/A"
+                    }
+                    isLoadingStats = false
+                }
             }
 
-            if (attempts.isNotEmpty()) {
-                val totalPercentage = attempts.sumOf { it.percentage }
-                val avg = totalPercentage / attempts.size
-                averageScore = String.format("%.1f", avg)
-            } else {
-                averageScore = "N/A"
-            }
-            isLoadingStats = false
-        } catch (e: Exception) {
-            isLoadingStats = false
+        onDispose {
+            listener.remove()
         }
     }
+
     val gradientBrush = Brush.verticalGradient(
         colors = listOf(
             StudentGradientStart,

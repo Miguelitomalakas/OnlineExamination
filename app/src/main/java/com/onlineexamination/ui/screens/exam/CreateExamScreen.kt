@@ -1,24 +1,48 @@
 package com.onlineexamination.ui.screens.exam
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.onlineexamination.data.model.Exam
 import com.onlineexamination.data.model.Question
 import com.onlineexamination.data.model.QuestionType
+import com.onlineexamination.ui.components.* 
 import com.onlineexamination.ui.theme.TeacherColor
 import com.onlineexamination.ui.viewmodel.ExamViewModel
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+
+private val subjects = listOf(
+    "Mathematics",
+    "Science",
+    "English",
+    "Filipino",
+    "Technology and Livelihood Education (TLE)",
+    "Music, Arts, Physical Education, and Health (MAPEH)",
+    "Edukasyon sa Pagpapakatao (ESP)",
+    "Araling Panlipunan (AP)"
+)
+private val gradeLevels = listOf("Grade 7", "Grade 8", "Grade 9", "Grade 10")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,7 +54,12 @@ fun CreateExamScreen(
     onExamCreated: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    
+
+    val dateFormat = SimpleDateFormat("MM/dd/yyyy", Locale.getDefault())
+    val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
+    val tomorrow = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 1) }.time
+    val nextWeek = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 7) }.time
+
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var subject by remember { mutableStateOf("") }
@@ -38,10 +67,53 @@ fun CreateExamScreen(
     var durationMinutes by remember { mutableStateOf("60") }
     var passingScore by remember { mutableStateOf("60") }
     var questions by remember { mutableStateOf<List<Question>>(emptyList()) }
-    var term by remember { mutableStateOf("Prelim") } // Added term state
+    var term by remember { mutableStateOf("Prelim") }
+    var startDate by remember { mutableStateOf(dateFormat.format(tomorrow)) }
+    var endDate by remember { mutableStateOf(dateFormat.format(nextWeek)) }
+    var startTime by remember { mutableStateOf(timeFormat.format(Date())) }
+    var endTime by remember { mutableStateOf(timeFormat.format(Date())) }
+
+    val context = LocalContext.current
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            val newQuestions = mutableListOf<Question>()
+            try {
+                context.contentResolver.openInputStream(it)?.use { inputStream ->
+                    BufferedReader(InputStreamReader(inputStream)).use { reader ->
+                        reader.lineSequence().forEach { line ->
+                            val parts = line.split(",")
+                            if (parts.size >= 8) {
+                                val questionText = parts[0]
+                                val type = QuestionType.valueOf(parts[1])
+                                val points = parts[2].toInt()
+                                val options = parts.subList(3, 7)
+                                val correctAnswer = parts[7]
+                                newQuestions.add(
+                                    Question(
+                                        id = System.currentTimeMillis().toString(),
+                                        questionText = questionText,
+                                        type = type,
+                                        options = options,
+                                        correctAnswer = correctAnswer,
+                                        points = points
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+                questions = questions + newQuestions
+            } catch (e: Exception) {
+                // Handle exception
+            }
+        }
+    }
 
     LaunchedEffect(uiState.successMessage) {
-        if (uiState.successMessage != null) {
+        if (uiState.successMessage == "Exam created successfully!") {
+            viewModel.clearMessages()
             onExamCreated()
         }
     }
@@ -56,7 +128,7 @@ fun CreateExamScreen(
                 ),
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -102,20 +174,20 @@ fun CreateExamScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    OutlinedTextField(
-                        value = subject,
-                        onValueChange = { subject = it },
-                        label = { Text("Subject *") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = gradeLevel,
-                        onValueChange = { gradeLevel = it },
-                        label = { Text("Grade Level") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true
-                    )
+                    Box(modifier = Modifier.weight(1f)) {
+                        DropdownField(
+                            label = "Subject *",
+                            selectedKey = subject,
+                            options = subjects.map { DropdownOption(it, it) }
+                        ) { subject = it.key }
+                    }
+                    Box(modifier = Modifier.weight(1f)) {
+                        DropdownField(
+                            label = "Grade Level",
+                            selectedKey = gradeLevel,
+                            options = gradeLevels.map { DropdownOption(it, it) }
+                        ) { gradeLevel = it.key }
+                    }
                 }
             }
 
@@ -138,6 +210,27 @@ fun CreateExamScreen(
                         modifier = Modifier.weight(1f),
                         singleLine = true
                     )
+                }
+            }
+            item {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        DatePickerField(label = "Start Date", value = startDate) { startDate = it }
+                    }
+                    Box(modifier = Modifier.weight(1f)) {
+                        TimePickerField(label = "Start Time", value = startTime) { startTime = it }
+                    }
+                }
+            }
+
+            item {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        DatePickerField(label = "End Date", value = endDate) { endDate = it }
+                    }
+                    Box(modifier = Modifier.weight(1f)) {
+                        TimePickerField(label = "End Time", value = endTime) { endTime = it }
+                    }
                 }
             }
 
@@ -188,22 +281,33 @@ fun CreateExamScreen(
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    Button(
-                        onClick = {
-                            questions = questions + Question(
-                                id = System.currentTimeMillis().toString(),
-                                questionText = "",
-                                type = QuestionType.MULTIPLE_CHOICE,
-                                options = listOf("", "", "", ""),
-                                correctAnswer = "",
-                                points = 10
-                            )
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = TeacherColor)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Add Question")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                questions = questions + Question(
+                                    id = System.currentTimeMillis().toString(),
+                                    questionText = "",
+                                    type = QuestionType.MULTIPLE_CHOICE,
+                                    options = listOf("", "", "", ""),
+                                    correctAnswer = "",
+                                    points = 1
+                                )
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = TeacherColor)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Add")
+                        }
+                        OutlinedButton(
+                            onClick = { filePickerLauncher.launch("*/*") },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = TeacherColor),
+                            border = BorderStroke(1.dp, TeacherColor)
+                        ) {
+                            Icon(Icons.Default.Upload, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Import")
+                        }
                     }
                 }
             }
@@ -212,7 +316,7 @@ fun CreateExamScreen(
                 QuestionEditor(
                     question = question,
                     index = index + 1,
-                    onQuestionChange = { updatedQuestion ->
+                    onQuestionChange = { updatedQuestion: Question ->
                         questions = questions.mapIndexed { i, q ->
                             if (i == index) updatedQuestion else q
                         }
@@ -240,7 +344,11 @@ fun CreateExamScreen(
                                 teacherId = teacherId,
                                 teacherName = teacherName,
                                 questions = questions,
-                                term = term // Added term to exam object
+                                term = term,
+                                startDate = parseDateTimeToMillis(startDate, startTime),
+                                endDate = parseDateTimeToMillis(endDate, endTime),
+                                startTime = startTime,
+                                endTime = endTime
                             )
                             viewModel.createExam(exam)
                         }
@@ -279,123 +387,3 @@ fun CreateExamScreen(
         }
     }
 }
-
-@Composable
-fun QuestionEditor(
-    question: Question,
-    index: Int,
-    onQuestionChange: (Question) -> Unit,
-    onDelete: () -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Question $index",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
-                }
-            }
-
-            OutlinedTextField(
-                value = question.questionText,
-                onValueChange = { onQuestionChange(question.copy(questionText = it)) },
-                label = { Text("Question Text *") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 2
-            )
-
-            // Question Type
-            var expanded by remember { mutableStateOf(false) }
-            Box(modifier = Modifier.fillMaxWidth()) {
-                OutlinedTextField(
-                    value = question.type.name.replace("_", " "),
-                    onValueChange = {},
-                    label = { Text("Question Type") },
-                    modifier = Modifier.fillMaxWidth(),
-                    readOnly = true,
-                    trailingIcon = {
-                        IconButton(onClick = { expanded = true }) {
-                            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
-                        }
-                    }
-                )
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false }
-                ) {
-                    QuestionType.values().forEach { type ->
-                        DropdownMenuItem(
-                            text = { Text(type.name.replace("_", " ")) },
-                            onClick = {
-                                onQuestionChange(question.copy(type = type))
-                                expanded = false
-                            }
-                        )
-                    }
-                }
-            }
-
-            // Options (for multiple choice)
-            if (question.type == QuestionType.MULTIPLE_CHOICE) {
-                Text("Options:", fontWeight = FontWeight.Medium)
-                question.options.forEachIndexed { optIndex, option ->
-                    OutlinedTextField(
-                        value = option,
-                        onValueChange = { newOption ->
-                            val newOptions = question.options.toMutableList()
-                            newOptions[optIndex] = newOption
-                            onQuestionChange(question.copy(options = newOptions))
-                        },
-                        label = { Text("Option ${optIndex + 1}") },
-                        modifier = Modifier.fillMaxWidth(),
-                        leadingIcon = {
-                            RadioButton(
-                                selected = question.correctAnswer == option,
-                                onClick = { onQuestionChange(question.copy(correctAnswer = option)) }
-                            )
-                        }
-                    )
-                }
-            } else {
-                // True/False or Short Answer
-                OutlinedTextField(
-                    value = question.correctAnswer,
-                    onValueChange = { onQuestionChange(question.copy(correctAnswer = it)) },
-                    label = { Text("Correct Answer *") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = question.type == QuestionType.TRUE_FALSE
-                )
-            }
-
-            OutlinedTextField(
-                value = question.points.toString(),
-                onValueChange = {
-                    if (it.all { char -> char.isDigit() }) {
-                        onQuestionChange(question.copy(points = it.toIntOrNull() ?: 10))
-                    }
-                },
-                label = { Text("Points") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-        }
-    }
-}
-

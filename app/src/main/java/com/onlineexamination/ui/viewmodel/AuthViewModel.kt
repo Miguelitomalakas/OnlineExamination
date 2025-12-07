@@ -1,5 +1,6 @@
 package com.onlineexamination.ui.viewmodel
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.onlineexamination.data.model.User
@@ -7,6 +8,7 @@ import com.onlineexamination.data.model.UserRole
 import com.onlineexamination.data.model.StudentInfo
 import com.onlineexamination.data.model.TeacherInfo
 import com.onlineexamination.data.repository.AuthRepository
+import com.onlineexamination.data.repository.FileRepository
 import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,6 +25,7 @@ data class AuthUiState(
 
 class AuthViewModel : ViewModel() {
     private val repository = AuthRepository()
+    private val fileRepository = FileRepository()
 
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
@@ -35,6 +38,13 @@ class AuthViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(currentUser = repository.currentUser)
         repository.currentUser?.let { user ->
             loadUserData(user.uid)
+        }
+    }
+
+    fun uploadFile(uri: Uri, onResult: (String?) -> Unit) {
+        viewModelScope.launch {
+            val result = fileRepository.uploadFile(uri, "user_documents")
+            onResult(result.getOrNull())
         }
     }
 
@@ -147,4 +157,3 @@ class AuthViewModel : ViewModel() {
         }
     }
 }
-
